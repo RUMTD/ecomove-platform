@@ -133,6 +133,10 @@
                                 <exclude>com/ecomove/EcoMoveApplication.class</exclude>
                                 <exclude>com/ecomove/model/**</exclude>
                                 <exclude>com/ecomove/repository/**</exclude>
+                                <exclude>com/ecomove/config/**</exclude>
+                                <exclude>com/ecomove/security/**</exclude>
+                                <exclude>com/ecomove/exception/**</exclude>
+                                <exclude>com/ecomove/controller/AuthController.class</exclude>
                             </excludes>
                         </configuration>
                     </execution>
