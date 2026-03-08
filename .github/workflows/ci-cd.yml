@@ -82,7 +82,7 @@ jobs:
       - name: "Compilation + rapport JaCoCo"
         run: mvn clean verify -DskipTests=false -Dspring.profiles.active=test
 
-      - name: "Analyse SonarQube"
+      - name: "Analyse SonarQube + Quality Gate"
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -95,7 +95,6 @@ jobs:
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
             -Dsonar.qualitygate.wait=true \
             -Dsonar.qualitygate.timeout=300
-
       #- name: "Quality Gate"
        # uses: SonarSource/sonarqube-quality-gate-action@master
         #timeout-minutes: 5
