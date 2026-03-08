@@ -1,0 +1,468 @@
+{
+  "info": {
+    "name": "EcoMove API — Collection Postman",
+    "_postman_id": "ecomove-2026",
+    "description": "Collection complète pour tester l'API EcoMove.\n\n**Ordre d'utilisation :**\n1. Lancer l'app : `mvn spring-boot:run` ou `docker-compose up`\n2. Exécuter 'Login' → copier le token automatiquement\n3. Tester les autres endpoints (token injecté automatiquement)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentification",
+      "item": [
+        {
+          "name": "Login — Obtenir un token JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Récupère automatiquement le token et l'injecte dans la variable",
+                  "var json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "    console.log('Token JWT sauvegardé automatiquement');",
+                  "}",
+                  "",
+                  "// Tests automatiques",
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Token présent', () => pm.expect(json.token).to.be.a('string'));",
+                  "pm.test('Type Bearer', () => pm.expect(json.type).to.eql('Bearer'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"driver@techcorp.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "**Étape 1 obligatoire** — Le token JWT est automatiquement sauvegardé dans la variable `{{token}}` pour tous les autres appels."
+          }
+        },
+        {
+          "name": "Login — Credentials manquants (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"only@email.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Test d'erreur — password absent → 400 Bad Request"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Réservations — Cas nominaux",
+      "item": [
+        {
+          "name": "Créer une réservation — 201 CONFIRMED ✅",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "var json = pm.response.json();",
+                  "pm.test('Status CONFIRMED', () => pm.expect(json.status).to.eql('CONFIRMED'));",
+                  "pm.test('ID présent', () => pm.expect(json.id).to.be.a('number'));",
+                  "pm.test('CO2 calculé', () => pm.expect(json.co2SavedKg).to.be.above(0));",
+                  "pm.test('userId correct', () => pm.expect(json.userId).to.eql(1));",
+                  "// Sauvegarder l'ID de la réservation pour les tests suivants",
+                  "pm.collectionVariables.set('bookingId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"tripId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings"
+              ]
+            },
+            "description": "**Cas nominal** — Employé authentifié réserve un trajet disponible.\n\n**Pré-requis :** Avoir exécuté 'Login' au préalable (token injecté automatiquement)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Réservations — Cas d'erreur",
+      "item": [
+        {
+          "name": "Conducteur réserve son trajet — 403 FORBIDDEN ❌",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+                  "var json = pm.response.json();",
+                  "pm.test('Erreur FORBIDDEN', () => pm.expect(json.error).to.eql('FORBIDDEN'));",
+                  "pm.test('Message explicite', () => pm.expect(json.message).to.include('conducteur'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 99,\n  \"tripId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings"
+              ]
+            },
+            "description": "**Règle métier** — userId=99 est le conducteur du trajet id=1 → 403 Forbidden"
+          }
+        },
+        {
+          "name": "Trajet complet — 409 CONFLICT ❌",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));",
+                  "var json = pm.response.json();",
+                  "pm.test('Erreur NO_SEATS', () => pm.expect(json.error).to.eql('NO_SEATS'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 2,\n  \"tripId\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings"
+              ]
+            },
+            "description": "**Cas limite** — tripId=20 a 0 places disponibles → 409 Conflict"
+          }
+        },
+        {
+          "name": "Trajet inexistant — 404 NOT FOUND ❌",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));",
+                  "var json = pm.response.json();",
+                  "pm.test('Erreur NOT_FOUND', () => pm.expect(json.error).to.eql('NOT_FOUND'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"tripId\": 99999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings"
+              ]
+            },
+            "description": "**Cas erreur** — tripId=99999 n'existe pas en BDD → 404 Not Found"
+          }
+        },
+        {
+          "name": "Sans token JWT — 401 UNAUTHORIZED ❌",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"tripId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings"
+              ]
+            },
+            "description": "**Sécurité** — Aucun header Authorization → 401 Unauthorized"
+          }
+        },
+        {
+          "name": "userId manquant — 400 BAD REQUEST ❌",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tripId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings"
+              ]
+            },
+            "description": "**Validation** — userId absent du corps JSON → 400 Bad Request (Spring Validation)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Santé & Documentation",
+      "item": [
+        {
+          "name": "Health Check — Actuator",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "var json = pm.response.json();",
+                  "pm.test('Status UP', () => pm.expect(json.status).to.eql('UP'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Vérifie que l'application tourne. Utilisé par Docker healthcheck."
+          }
+        },
+        {
+          "name": "Swagger UI — Documentation interactive",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/swagger-ui.html",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "swagger-ui.html"
+              ]
+            },
+            "description": "Ouvre la documentation Swagger UI dans le navigateur."
+          }
+        },
+        {
+          "name": "OpenAPI JSON — Spec brute",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v3/api-docs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs"
+              ]
+            },
+            "description": "Retourne la spécification OpenAPI 3.0 en JSON brut."
+          }
+        }
+      ]
+    }
+  ]
+}

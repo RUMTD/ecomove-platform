@@ -1,0 +1,130 @@
+version: '3.9'
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EcoMove — Stack complète Docker Compose
+# Services : PostgreSQL + SonarQube + EcoMove App
+#
+# Commandes utiles :
+#   Démarrer tout    : docker-compose up -d
+#   Voir les logs    : docker-compose logs -f ecomove-app
+#   Arrêter tout     : docker-compose down
+#   Tout supprimer   : docker-compose down -v
+# ═══════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PostgreSQL — Base de données principale
+  # ─────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: ecomove-postgres
+    environment:
+      POSTGRES_DB: ecomove
+      POSTGRES_USER: ecomove
+      POSTGRES_PASSWORD: ecomove_secret
+    ports:
+      - "5432:5432"             # accessible depuis IntelliJ / DBeaver
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   # persistance des données
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql  # données initiales
+    networks:
+      - ecomove-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecomove -d ecomove"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # SonarQube — Analyse qualité du code
+  # Accès : http://localhost:9000  (admin / admin)
+  # ─────────────────────────────────────────────────────────────────────────
+  sonarqube:
+    image: sonarqube:10-community
+    container_name: ecomove-sonarqube
+    depends_on:
+      sonar-postgres:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-postgres:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar_secret
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    ports:
+      - "9000:9000"             # http://localhost:9000
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    networks:
+      - ecomove-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/api/system/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # Base de données dédiée à SonarQube (séparée de l'app)
+  sonar-postgres:
+    image: postgres:15-alpine
+    container_name: sonar-postgres
+    environment:
+      POSTGRES_DB: sonarqube
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar_secret
+    volumes:
+      - sonar_postgres_data:/var/lib/postgresql/data
+    networks:
+      - ecomove-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonarqube"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # EcoMove App — Application Spring Boot
+  # ─────────────────────────────────────────────────────────────────────────
+  ecomove-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecomove-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_USER: ecomove
+      DB_PASSWORD: ecomove_secret
+      DB_URL: jdbc:postgresql://postgres:5432/ecomove
+      JWT_SECRET: ${JWT_SECRET:-ecomove_jwt_secret_key_min_256_bits_pour_hs256}
+      JWT_EXPIRATION_MS: 86400000
+    ports:
+      - "8080:8080"             # API REST
+    networks:
+      - ecomove-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+# ─────────────────────────────────────────────────────────────────────────
+# Volumes persistants
+# ─────────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  sonar_postgres_data:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
+
+# ─────────────────────────────────────────────────────────────────────────
+# Réseau interne isolé
+# ─────────────────────────────────────────────────────────────────────────
+networks:
+  ecomove-network:
+    driver: bridge
